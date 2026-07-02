@@ -86,6 +86,9 @@ intellijPlatform {
             staged/unstaged/untracked counts, and divergence from <code>main</code> and the remote). Status
             loads asynchronously and never blocks the UI.</li>
             <li><b>Search, filter, and sort</b> across branch, path, commit, message, creator, and state.</li>
+            <li><b>New worktree from a remote branch</b> — browse and filter the repository's remote branches,
+            fetch to refresh them, and create a worktree with a new local branch that tracks the one you pick;
+            also available by right-clicking a branch in the Git Log.</li>
             <li><b>Every worktree operation through Git4Idea</b> — list, create, open, remove (with optional
             force and backing-branch deletion), lock, unlock, move, prune, and repair, all on a background
             thread.</li>

@@ -30,6 +30,7 @@ Git Arborist makes Git worktrees first-class inside JetBrains IDEs. Create, open
 - **Worktrees tool window.** A dedicated panel shows each worktree — its branch, location, latest commit, and age — with state badges: current, uncommitted changes, divergence from `main` or the remote, and safe-to-delete.
 - **Search, filter, and sort.** Look across branch, path, commit, message, creator, and state to find the worktree you want, even when there are many.
 - **Full worktree lifecycle.** Create, open, remove, lock, move, prune, and repair worktrees without dropping to the command line.
+- **Create from a remote branch.** Browse and filter the repository's remote branches, **Fetch** to refresh them, and spin up a worktree with a new local branch that tracks the one you picked — no typing the `origin/…` ref by hand.
 - **One-click open.** Open any worktree as a project in this window or a new one; an already-open worktree is focused rather than opened again.
 - **Carry over project setup.** New worktrees inherit your run configurations, code style, and local tooling the first time they open, while secrets and heavy build folders are left out.
 - **Safe-to-delete detection.** Worktrees whose work is fully merged are dimmed and badged `SAFE`, so they're easy to spot and remove.
@@ -67,6 +68,7 @@ In your IDE, open **Settings → Plugins → Marketplace**, search for **Git Arb
 Open the **Git Arborist** tool window from the right-hand tool-window bar, or run **Git → Worktrees → Open Worktrees Panel** from the top-menu.
 
 - **Create** a worktree with the `+` title action. Choose a starting point (branch, tag, commit, or `HEAD`), optionally name a new branch, pick a target directory, and decide whether to open it afterward.
+- **Create from a remote branch** with the **New Worktree from Remote Branch** title action, or from the **Git Log** by right-clicking a commit's branch label. Filter the remote-branch list, **Fetch** to refresh it, then pick a branch to seed a tracking local branch and its target directory.
 - **Open** a worktree by double-clicking it, pressing Enter, the row's right-click **Open...** action, or the **Open Worktree** title action. The IDE's standard open prompt then decides whether it opens in this window or a new one.
 - **Manage** worktrees from the row's right-click menu or the `Git > Worktrees` menu: lock, unlock, move, reapply carry-over, and remove. Removing offers force removal and, when a local branch backs the worktree, deletion of that branch.
 - **Prune** and **Repair** the repository's worktree administrative data from the `Git > Worktrees` menu.
