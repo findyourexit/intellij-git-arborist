@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - The Worktrees tool window now keeps itself current when worktrees are added, removed, or moved outside Git Arborist (the Git CLI, other plugins, or other IDE actions). It refreshes silently on Git4Idea repository changes while visible, and when the tool window is reopened, so the list no longer goes stale until a manual refresh.
+- New worktrees can now be created directly from a **remote branch**. A **New Worktree from Remote Branch** title action (and matching `Git > Worktrees` menu entry) opens a searchable list of the repository's remote-tracking branches, with a **Fetch** button that pulls every remote — authentication and progress handled by the IDE — and refreshes the list in place. Picking a branch seeds a new local branch that tracks it, defaults the target path from the branch name, and creates the worktree through the same flow as a manual create. This closes the gap where checking out a remote branch onto a fresh worktree previously required typing the full `origin/…` ref by hand.
+- Worktrees can also be created from the **Git Log**: right-click a commit that carries a branch label and choose **Create Worktree from Branch…**. A remote branch seeds a new local tracking branch; a local branch is checked out into the new worktree. This uses only the platform's public VCS Log data, so it stays compatible across IDE builds. (The Git Branches popup widget is intentionally not hooked: its branch-selection APIs are marked internal and off-limits to third-party plugins, and it already ships its own built-in "New Worktree" action.)
 
 ### Fixed
 
