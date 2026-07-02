@@ -26,7 +26,7 @@ complexity:
     allowedDepth: 6            # default 4; panel { group { row { } } } nesting is common
   TooManyFunctions:
     allowedFunctionsPerFile: 50
-    allowedFunctionsPerClass: 25      # default 11; WorktreeGitService aggregates all worktree CRUD + status ops
+    allowedFunctionsPerClass: 30      # default 11; WorktreeGitService and WorktreesPanel aggregate every worktree CRUD, status, and UI-orchestration op
     allowedFunctionsPerInterface: 15
     allowedFunctionsPerObject: 20
     allowedFunctionsPerEnum: 15

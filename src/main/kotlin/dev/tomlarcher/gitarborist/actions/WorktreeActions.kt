@@ -27,6 +27,7 @@ import dev.tomlarcher.gitarborist.git.requiresForceRetry
 import dev.tomlarcher.gitarborist.open.WorktreeOpenService
 import dev.tomlarcher.gitarborist.settings.GitArboristSettingsResolver
 import dev.tomlarcher.gitarborist.ui.CarryOverResultDialog
+import dev.tomlarcher.gitarborist.ui.CheckoutRemoteBranchDialog
 import dev.tomlarcher.gitarborist.ui.CreateWorktreeDialog
 import dev.tomlarcher.gitarborist.ui.RemoveWorktreeDialog
 import dev.tomlarcher.gitarborist.ui.WorktreePickerDialog
@@ -53,46 +54,44 @@ class CreateWorktreeAction : DumbAwareAction() {
             val settings = GitArboristSettingsResolver.effective(project)
             val dialog = CreateWorktreeDialog(project, repositoryRoot, settings.openAfterCreate, settings.defaultWorktreeDirectory)
             if (dialog.showAndGet()) {
-                create(project, dialog.request(), dialog.shouldOpenAfterCreate)
+                createWorktree(project, dialog.request(), dialog.shouldOpenAfterCreate)
             }
         }
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+}
 
-    private fun create(
-        project: Project,
-        request: AddWorktreeRequest,
-        openAfterCreate: Boolean,
-    ) {
-        runBackground(
-            project = project,
-            title = "Creating Git worktree",
-            work = {
-                val result = project.service<WorktreeGitService>().addWorktree(request)
-                val created =
-                    if (result.success && openAfterCreate) {
-                        project
-                            .service<WorktreeCacheService>()
-                            .refreshBlocking()
-                            .worktrees
-                            .firstOrNull { PathUtil.samePath(it.path, request.targetPath) }
-                    } else {
-                        null
-                    }
-                CreateResult(result, created)
-            },
-        ) { created ->
-            if (created.result.success) {
-                Notifications.info(project, "Worktree created", request.targetPath.toString())
-                created.worktree?.let { worktree ->
-                    if (openAfterCreate) project.service<WorktreeOpenService>().openWorktreeAsync(worktree)
-                }
-            } else {
-                Notifications.error(project, "Unable to create worktree", created.result.output.ifBlank { "Git command failed" })
+class CheckoutRemoteBranchAction : DumbAwareAction() {
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        loadMainRoot(project, "Loading Git worktrees") { repositoryRoot ->
+            val settings = GitArboristSettingsResolver.effective(project)
+            runBackground(
+                project = project,
+                title = "Loading remote branches",
+                work = { project.service<WorktreeGitService>().listRemoteBranches(repositoryRoot) },
+            ) { branches ->
+                val dialog =
+                    CheckoutRemoteBranchDialog(
+                        project = project,
+                        repositoryRoot = repositoryRoot,
+                        initialBranches = branches,
+                        openByDefault = settings.openAfterCreate,
+                        worktreeDirectory = settings.defaultWorktreeDirectory,
+                        fetcher = {
+                            val service = project.service<WorktreeGitService>()
+                            val fetch = service.fetchRemotes(repositoryRoot)
+                            if (!fetch.success) error(fetch.output.ifBlank { "Fetch failed" })
+                            service.listRemoteBranches(repositoryRoot)
+                        },
+                    )
+                if (dialog.showAndGet()) createWorktree(project, dialog.request(), dialog.shouldOpenAfterCreate)
             }
         }
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 }
 
 class OpenWorktreeAction : DumbAwareAction() {
@@ -379,6 +378,40 @@ private fun openSelected(e: AnActionEvent) {
     val project = e.project ?: return
     val worktree = selectedWorktree(e) ?: return
     project.service<WorktreeOpenService>().openWorktreeAsync(worktree)
+}
+
+internal fun createWorktree(
+    project: Project,
+    request: AddWorktreeRequest,
+    openAfterCreate: Boolean,
+) {
+    runBackground(
+        project = project,
+        title = "Creating Git worktree",
+        work = {
+            val result = project.service<WorktreeGitService>().addWorktree(request)
+            val created =
+                if (result.success && openAfterCreate) {
+                    project
+                        .service<WorktreeCacheService>()
+                        .refreshBlocking()
+                        .worktrees
+                        .firstOrNull { PathUtil.samePath(it.path, request.targetPath) }
+                } else {
+                    null
+                }
+            CreateResult(result, created)
+        },
+    ) { created ->
+        if (created.result.success) {
+            Notifications.info(project, "Worktree created", request.targetPath.toString())
+            created.worktree?.let { worktree ->
+                if (openAfterCreate) project.service<WorktreeOpenService>().openWorktreeAsync(worktree)
+            }
+        } else {
+            Notifications.error(project, "Unable to create worktree", created.result.output.ifBlank { "Git command failed" })
+        }
+    }
 }
 
 private fun loadMainRoot(

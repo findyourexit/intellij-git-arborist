@@ -26,6 +26,8 @@
                     class="dev.tomlarcher.gitarborist.actions.OpenWorktreesPanelAction"/>
             <action id="dev.tomlarcher.gitarborist.actions.CreateWorktree"
                     class="dev.tomlarcher.gitarborist.actions.CreateWorktreeAction"/>
+            <action id="dev.tomlarcher.gitarborist.actions.CheckoutRemoteBranch"
+                    class="dev.tomlarcher.gitarborist.actions.CheckoutRemoteBranchAction"/>
             <action id="dev.tomlarcher.gitarborist.actions.OpenWorktree"
                     class="dev.tomlarcher.gitarborist.actions.OpenWorktreeAction"/>
             <group id="dev.tomlarcher.gitarborist.actions.SwitchToWorktree"
@@ -58,5 +60,11 @@
                     class="dev.tomlarcher.gitarborist.actions.ProjectViewRemoveWorktreeAction"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </group>
+
+        <action id="dev.tomlarcher.gitarborist.actions.CreateWorktreeFromLog"
+                class="dev.tomlarcher.gitarborist.actions.CreateWorktreeFromLogAction"
+                icon="AllIcons.Vcs.Branch">
+            <add-to-group group-id="Vcs.Log.ContextMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>
