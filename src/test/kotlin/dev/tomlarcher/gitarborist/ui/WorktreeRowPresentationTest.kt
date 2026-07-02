@@ -1,5 +1,6 @@
 package dev.tomlarcher.gitarborist.ui
 
+import dev.tomlarcher.gitarborist.git.Contributor
 import dev.tomlarcher.gitarborist.git.WorktreeInfo
 import dev.tomlarcher.gitarborist.git.WorktreeStatus
 import java.time.Instant
@@ -80,6 +81,7 @@ class WorktreeRowPresentationTest {
 
         assertEquals("feature/demo", worktreeTitle(row))
         assertEquals("../repo.feature · abcdef12 · 2d", worktreeSubtitle(row))
+        assertEquals("Update checkout flow", worktreeMessageLine(row))
         assertEquals("Update checkout flow · Creator: Ada Lovelace · Locked: review · Safe to delete", worktreeMeta(row))
     }
 
@@ -91,6 +93,8 @@ class WorktreeRowPresentationTest {
         assertTrue(rowMatchesFilter(values, listOf("feature", "safe")))
         assertTrue(rowMatchesFilter(values, listOf("locked", "review")))
         assertTrue(rowMatchesFilter(values, listOf("creator", "ada")))
+        assertTrue(rowMatchesFilter(values, listOf("grace", "hopper")))
+        assertTrue(rowMatchesFilter(values, listOf("grace@example.test")))
 
         val dirtyRow = row.copy(safeToDelete = false, statusDetails = row.statusDetails?.copy(dirty = true))
         assertTrue(rowMatchesFilter(rowSearchValues(dirtyRow), listOf("dirty")))
@@ -138,6 +142,7 @@ class WorktreeRowPresentationTest {
                 commitMessage = "Update checkout flow",
                 creatorName = "Ada Lovelace",
                 creatorEmail = "ada@example.test",
+                committers = listOf(Contributor("Ada Lovelace", "ada@example.test"), Contributor("Grace Hopper", "grace@example.test")),
                 safeToDelete = true,
             )
         return WorktreeRow(
@@ -152,6 +157,7 @@ class WorktreeRowPresentationTest {
             age = ageLabel(status.commitEpochSeconds),
             message = status.commitMessage.orEmpty(),
             creator = status.creatorName.orEmpty(),
+            committers = status.committers,
             safeToDelete = true,
             statusDetails = status,
         )

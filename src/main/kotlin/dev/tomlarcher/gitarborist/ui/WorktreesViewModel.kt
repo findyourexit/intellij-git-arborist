@@ -3,6 +3,7 @@ package dev.tomlarcher.gitarborist.ui
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import dev.tomlarcher.gitarborist.git.Contributor
 import dev.tomlarcher.gitarborist.git.WorktreeCacheService
 import dev.tomlarcher.gitarborist.git.WorktreeInfo
 import dev.tomlarcher.gitarborist.git.WorktreeStatus
@@ -84,6 +85,7 @@ data class WorktreeRow(
     val message: String,
     val safeToDelete: Boolean,
     val creator: String,
+    val committers: List<Contributor>,
     val statusDetails: WorktreeStatus?,
 )
 
@@ -105,6 +107,7 @@ private fun List<WorktreeInfo>.toRows(
             age = ageLabel(status?.commitEpochSeconds),
             message = status?.commitMessage.orEmpty(),
             creator = status?.creatorName.orEmpty(),
+            committers = status?.committers.orEmpty(),
             safeToDelete = status?.safeToDelete == true && !info.isMain,
             statusDetails = status,
         )
