@@ -50,6 +50,14 @@ class GitArboristConfigurable(
                 row {
                     checkBox("Show relative worktree locations").bindSelected(global::showRelativeLocations)
                 }
+                row {
+                    checkBox("Fetch real GitHub avatars for contributors (uses your saved GitHub Git credentials)")
+                        .bindSelected(global::resolveGitHubAvatars)
+                        .comment(
+                            "When on, contributor monograms are replaced by GitHub avatars resolved through the GitHub API " +
+                                "for worktrees whose remote is github.com. Falls back to Gravatar and monograms otherwise.",
+                        )
+                }
             }
 
             group("Project override") {

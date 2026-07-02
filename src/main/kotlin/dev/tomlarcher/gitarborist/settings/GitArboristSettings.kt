@@ -33,5 +33,6 @@ class GitArboristSettings : PersistentStateComponent<GitArboristSettings.State> 
         var runCarryOverOnlyWhenIdeaMissing: Boolean = true,
         var allowHeavyManifestPaths: Boolean = false,
         var showRelativeLocations: Boolean = true,
+        var resolveGitHubAvatars: Boolean = false,
     )
 }

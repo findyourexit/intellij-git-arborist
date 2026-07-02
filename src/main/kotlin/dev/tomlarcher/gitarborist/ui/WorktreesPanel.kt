@@ -15,6 +15,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.util.Disposer
 import com.intellij.ui.BadgeIconSupplier
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.JBColor
@@ -27,11 +28,13 @@ import com.intellij.ui.components.fields.ExtendableTextComponent
 import com.intellij.ui.components.fields.ExtendableTextField
 import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.Alarm
+import com.intellij.util.ui.AbstractLayoutManager
 import com.intellij.util.ui.FilterComponent
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import dev.tomlarcher.gitarborist.carry.WorktreeCarryOverService
 import dev.tomlarcher.gitarborist.git.AddWorktreeRequest
+import dev.tomlarcher.gitarborist.git.Contributor
 import dev.tomlarcher.gitarborist.git.RemoveWorktreeRequest
 import dev.tomlarcher.gitarborist.git.WorktreeCacheService
 import dev.tomlarcher.gitarborist.git.WorktreeCommandResult
@@ -47,12 +50,14 @@ import git4idea.repo.GitRepositoryChangeListener
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
+import java.awt.Container
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.GridLayout
+import java.awt.Image
 import java.awt.Point
 import java.awt.RenderingHints
 import java.awt.event.KeyAdapter
@@ -69,10 +74,13 @@ import javax.swing.JList
 import javax.swing.JPanel
 import javax.swing.ListCellRenderer
 import javax.swing.ListSelectionModel
+import javax.swing.ScrollPaneConstants
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 import javax.swing.ToolTipManager
 import javax.swing.event.DocumentEvent
+import kotlin.math.max
+import kotlin.math.min
 
 class WorktreesPanel(
     private val project: Project,
@@ -93,6 +101,8 @@ class WorktreesPanel(
                     worktreeTooltip(row, event.x - bounds.x, event.y - bounds.y, bounds.width, bounds.height)
                 }
             }
+
+            override fun getScrollableTracksViewportWidth(): Boolean = true
         }.apply {
             selectionMode = ListSelectionModel.SINGLE_SELECTION
             cellRenderer = WorktreeListCellRenderer()
@@ -190,6 +200,7 @@ class WorktreesPanel(
                 border = JBUI.Borders.empty()
                 viewport.isOpaque = false
                 isOpaque = false
+                horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
             },
             BorderLayout.CENTER,
         )
@@ -202,6 +213,9 @@ class WorktreesPanel(
             remove = ::removeSelected,
             selectedIsLocked = { list.selectedValue?.info?.isLocked },
         ).installOn(list)
+        val avatarHook = Runnable { SwingUtilities.invokeLater { if (isShowing) list.repaint() } }
+        AvatarService.getInstance().addRepaintHook(avatarHook)
+        Disposer.register(parentDisposable) { AvatarService.getInstance().removeRepaintHook(avatarHook) }
         installExternalChangeListener(parentDisposable)
         refresh()
     }
@@ -620,29 +634,32 @@ class WorktreesPanel(
     }
 
     private class WorktreeListCellRenderer :
-        JPanel(BorderLayout()),
+        JPanel(GridLayout(0, 1, 0, 2)),
         ListCellRenderer<WorktreeRow> {
         private val title = JLabel()
-        private val subtitle = JLabel()
-        private val meta = JLabel()
-        private val badges = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0))
-        private val textPanel =
-            JPanel(GridLayout(0, 1, 0, 2)).apply {
+        private val message = JLabel().apply { font = JBUI.Fonts.smallFont() }
+        private val primaryBadges = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0)).apply { isOpaque = false }
+        private val avatars = JPanel(FlowLayout(FlowLayout.RIGHT, 2, 0)).apply { isOpaque = false }
+        private val firstLineRight =
+            JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0)).apply {
+                isOpaque = false
+                add(primaryBadges)
+                add(avatars)
+            }
+        private val firstLine =
+            JPanel(TwoSidePriorityLayout(JBUIScale.scale(8), JBUIScale.scale(60))).apply {
                 isOpaque = false
                 add(title)
-                add(subtitle)
-                add(meta)
+                add(firstLineRight, TwoSidePriorityLayout.RIGHT)
             }
+        private val secondaryBadges = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply { isOpaque = false }
 
         init {
             isOpaque = true
             border = JBUI.Borders.empty(7, 12, 7, 12)
-            badges.isOpaque = false
-            title.font = title.font.deriveFont(Font.BOLD)
-            subtitle.font = JBUI.Fonts.smallFont()
-            meta.font = JBUI.Fonts.smallFont()
-            add(textPanel, BorderLayout.CENTER)
-            add(badges, BorderLayout.EAST)
+            add(firstLine)
+            add(message)
+            add(secondaryBadges)
         }
 
         override fun getListCellRendererComponent(
@@ -663,19 +680,46 @@ class WorktreesPanel(
                 }
             val secondary = if (isSelected) list.selectionForeground else UIUtil.getContextHelpForeground()
             title.foreground = primary
-            subtitle.foreground = secondary
-            meta.foreground = secondary
             title.text = value?.let(::worktreeTitle).orEmpty()
-            subtitle.text = value?.let(::worktreeSubtitle).orEmpty()
-            meta.text = value?.let(::worktreeMeta).orEmpty()
-            meta.isVisible = meta.text.isNotBlank()
-            badges.removeAll()
+            message.foreground = secondary
+            message.text = value?.let(::worktreeMessageLine).orEmpty()
+            message.isVisible = message.text.isNotBlank()
+            primaryBadges.removeAll()
+            secondaryBadges.removeAll()
+            avatars.removeAll()
             value?.let { row ->
-                worktreeBadges(row).forEach { badge ->
-                    badges.add(createBadgeLabel(badge, isSelected, list))
-                }
+                worktreePrimaryBadges(row).forEach { primaryBadges.add(createBadgeLabel(it, isSelected, list)) }
+                worktreeSecondaryBadges(row).forEach { secondaryBadges.add(createBadgeLabel(it, isSelected, list)) }
+                fillAvatars(row, secondary)
             }
+            secondaryBadges.isVisible = secondaryBadges.componentCount > 0
             return this
+        }
+
+        private fun fillAvatars(
+            row: WorktreeRow,
+            separatorColor: Color,
+        ) {
+            if (row.creator.isBlank()) return
+            avatars.add(
+                JLabel(CreatorAvatarIcon(row.creator, row.statusDetails?.creatorEmail, row.info.repositoryRoot)).apply {
+                    toolTipText =
+                        "Creator: ${row.creator}"
+                },
+            )
+            val committers = row.committers.filter { it.name.isNotBlank() }
+            if (committers.isEmpty()) return
+            avatars.add(
+                JLabel("|").apply {
+                    foreground = separatorColor
+                    font = JBUI.Fonts.smallFont()
+                },
+            )
+            avatars.add(
+                JLabel(OverlaidAvatarsIcon(committers, row.info.repositoryRoot)).apply {
+                    toolTipText = committers.joinToString(", ", prefix = "Committers: ") { it.name }
+                },
+            )
         }
 
         private fun createBadgeLabel(
@@ -860,6 +904,8 @@ private class SelectFilterComponent<T : Any>(
 
 private class CreatorAvatarIcon(
     private val name: String,
+    private val email: String? = null,
+    private val repositoryRoot: Path? = null,
 ) : Icon {
     override fun getIconWidth(): Int = AVATAR_SIZE
 
@@ -874,15 +920,8 @@ private class CreatorAvatarIcon(
         val g = graphics.create() as Graphics2D
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-            g.color = avatarColor(name)
-            g.fillOval(x, y, AVATAR_SIZE, AVATAR_SIZE)
-            g.color = Color.WHITE
-            g.font = JBUI.Fonts.smallFont().deriveFont(Font.BOLD, AVATAR_FONT_SIZE.toFloat())
-            val initials = creatorInitials(name)
-            val metrics = g.fontMetrics
-            val textX = x + (AVATAR_SIZE - metrics.stringWidth(initials)) / 2
-            val textY = y + ((AVATAR_SIZE - metrics.height) / 2) + metrics.ascent
-            g.drawString(initials, textX, textY)
+            val ring = component?.background ?: Color.WHITE
+            paintAvatar(g, x, y, avatarColor(name), creatorInitials(name), ring, AvatarService.getInstance().image(email, repositoryRoot))
         } finally {
             g.dispose()
         }
@@ -898,6 +937,82 @@ private fun creatorInitials(name: String): String =
         .take(2)
         .joinToString("") { it.first().uppercaseChar().toString() }
         .ifBlank { "?" }
+
+/**
+ * Up to [MAX_COMMITTER_AVATARS] committer avatars overlapping left-to-right; when there are more, the
+ * final slot becomes a neutral "+N" counter, like the reviewers stack in the Pull Requests list.
+ */
+private class OverlaidAvatarsIcon(
+    committers: List<Contributor>,
+    private val repositoryRoot: Path?,
+) : Icon {
+    private val shown = if (committers.size > MAX_COMMITTER_AVATARS) committers.take(MAX_COMMITTER_AVATARS - 1) else committers
+    private val overflow = (committers.size - shown.size).coerceAtLeast(0)
+    private val slots = shown.size + if (overflow > 0) 1 else 0
+    private val step = (AVATAR_SIZE * AVATAR_OVERLAP).toInt()
+
+    override fun getIconWidth(): Int = if (slots == 0) 0 else AVATAR_SIZE + (slots - 1) * step
+
+    override fun getIconHeight(): Int = AVATAR_SIZE
+
+    override fun paintIcon(
+        component: Component?,
+        graphics: Graphics,
+        x: Int,
+        y: Int,
+    ) {
+        val g = graphics.create() as Graphics2D
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            val ring = component?.background ?: Color.WHITE
+            var ix = x
+            shown.forEach { committer ->
+                paintAvatar(
+                    g,
+                    ix,
+                    y,
+                    avatarColor(committer.name),
+                    creatorInitials(committer.name),
+                    ring,
+                    AvatarService.getInstance().image(committer.email, repositoryRoot),
+                )
+                ix += step
+            }
+            if (overflow > 0) paintAvatar(g, ix, y, JBColor.GRAY, "+$overflow", ring, null)
+        } finally {
+            g.dispose()
+        }
+    }
+}
+
+private fun paintAvatar(
+    g: Graphics2D,
+    x: Int,
+    y: Int,
+    color: Color,
+    text: String,
+    ring: Color,
+    image: Image?,
+) {
+    g.color = ring
+    g.fillOval(x - 1, y - 1, AVATAR_SIZE + 2, AVATAR_SIZE + 2)
+    if (image != null) {
+        val clip = g.clip
+        g.clip(
+            java.awt.geom.Ellipse2D
+                .Float(x.toFloat(), y.toFloat(), AVATAR_SIZE.toFloat(), AVATAR_SIZE.toFloat()),
+        )
+        g.drawImage(image, x, y, AVATAR_SIZE, AVATAR_SIZE, null)
+        g.clip = clip
+        return
+    }
+    g.color = color
+    g.fillOval(x, y, AVATAR_SIZE, AVATAR_SIZE)
+    g.color = Color.WHITE
+    g.font = JBUI.Fonts.smallFont().deriveFont(Font.BOLD, AVATAR_FONT_SIZE.toFloat())
+    val metrics = g.fontMetrics
+    g.drawString(text, x + (AVATAR_SIZE - metrics.stringWidth(text)) / 2, y + ((AVATAR_SIZE - metrics.height) / 2) + metrics.ascent)
+}
 
 private enum class WorktreeQuickFilter(
     val label: String,
@@ -1015,6 +1130,8 @@ internal fun rowSearchValues(row: WorktreeRow): List<String> =
         add(row.message)
         if (row.creator.isNotBlank()) add("creator")
         add(row.creator)
+        addAll(row.committers.map { it.name })
+        addAll(row.committers.mapNotNull { it.email })
         add(row.statusDetails?.creatorEmail.orEmpty())
         add(primaryStateLabel(row))
         add(row.info.lockReason.orEmpty())
@@ -1037,6 +1154,8 @@ internal fun rowMatchesFilter(
 }
 
 internal fun worktreeTitle(row: WorktreeRow): String = row.branch
+
+internal fun worktreeMessageLine(row: WorktreeRow): String = row.message
 
 internal fun worktreeSubtitle(row: WorktreeRow): String =
     listOf(row.path, row.commit, row.age)
@@ -1162,34 +1281,35 @@ private const val AVATAR_SIZE = 16
 private const val AVATAR_FONT_SIZE = 9
 private const val AVATAR_SATURATION = 0.55f
 private const val AVATAR_BRIGHTNESS = 0.72f
+private const val MAX_COMMITTER_AVATARS = 5
+private const val AVATAR_OVERLAP = 0.66f
 private const val INITIAL_EMPTY_REFRESH_RETRIES = 2
 private const val INITIAL_EMPTY_REFRESH_DELAY_MS = 750
 private const val EXTERNAL_REFRESH_DELAY_MS = 400
 
-private fun worktreeBadges(row: WorktreeRow): List<WorktreeBadge> = worktreeStateBadges(row) + worktreeChangeBadges(row) + worktreeDivergenceBadges(row)
+private fun worktreeBadges(row: WorktreeRow): List<WorktreeBadge> = worktreePrimaryBadges(row) + worktreeSecondaryBadges(row)
 
-private fun worktreeStateBadges(row: WorktreeRow): List<WorktreeBadge> =
+/** State pills shown on the first row, mirroring where DRAFT sits in the Pull Requests list. */
+private fun worktreePrimaryBadges(row: WorktreeRow): List<WorktreeBadge> =
     buildList {
         if (row.info.isMain) add(WorktreeBadge("MAIN", "Main worktree", BadgeTone.Info))
         if (row.info.isCurrent) add(WorktreeBadge("CURRENT", "Current project worktree", BadgeTone.Info))
+        if (row.statusDetails?.dirty == true) add(WorktreeBadge("DIRTY", "Working tree has changes", BadgeTone.Danger))
         if (row.safeToDelete) add(WorktreeBadge("SAFE", "Clean and safe to delete", BadgeTone.Success))
+    }
+
+/** Detailed status moved to the third row: lock/prune/detach, file counts, line delta, divergence. */
+private fun worktreeSecondaryBadges(row: WorktreeRow): List<WorktreeBadge> =
+    buildList {
         if (row.info.isLocked) add(WorktreeBadge("LOCKED", row.info.lockReason ?: "Locked worktree", BadgeTone.Warning))
         if (row.info.isPrunable) add(WorktreeBadge("PRUNABLE", row.info.prunableReason ?: "Prunable worktree", BadgeTone.Warning))
         if (row.info.isDetached) add(WorktreeBadge("DETACHED", "Detached HEAD", BadgeTone.Neutral))
-    }
-
-private fun worktreeChangeBadges(row: WorktreeRow): List<WorktreeBadge> =
-    buildList {
-        val status = row.statusDetails ?: return@buildList
-        if (status.dirty) add(WorktreeBadge("DIRTY", "Working tree has changes", BadgeTone.Danger))
-        if (status.stagedCount > 0) add(WorktreeBadge("S${status.stagedCount}", "Staged files", BadgeTone.Warning))
-        if (status.unstagedCount > 0) add(WorktreeBadge("U${status.unstagedCount}", "Unstaged files", BadgeTone.Warning))
-        if (status.untrackedCount > 0) add(WorktreeBadge("?${status.untrackedCount}", "Untracked files", BadgeTone.Warning))
-        if (row.headDelta != "·") add(WorktreeBadge(row.headDelta, "Changed lines at HEAD", BadgeTone.Neutral))
-    }
-
-private fun worktreeDivergenceBadges(row: WorktreeRow): List<WorktreeBadge> =
-    buildList {
+        row.statusDetails?.let { status ->
+            if (status.stagedCount > 0) add(WorktreeBadge("S${status.stagedCount}", "Staged files", BadgeTone.Warning))
+            if (status.unstagedCount > 0) add(WorktreeBadge("U${status.unstagedCount}", "Unstaged files", BadgeTone.Warning))
+            if (status.untrackedCount > 0) add(WorktreeBadge("?${status.untrackedCount}", "Untracked files", BadgeTone.Warning))
+            if (row.headDelta != "·") add(WorktreeBadge(row.headDelta, "Changed lines at HEAD", BadgeTone.Neutral))
+        }
         if (row.mainDivergence != "·" && row.mainDivergence != "|") {
             add(WorktreeBadge("main ${row.mainDivergence}", "Divergence from main", BadgeTone.Neutral))
         }
@@ -1228,4 +1348,54 @@ private enum class BadgeTone(
         JBColor.namedColor("Label.errorForeground", JBColor(0xA12722, 0xFF8A80)),
         JBColor.namedColor("Label.errorBackground", JBColor(0xFCE8E6, 0x4A2525)),
     ),
+}
+
+/**
+ * Lays out a left and a right component on one row, mirroring the IntelliJ Pull Requests list:
+ * the right component (status badges) stays pinned to the right edge and is clipped to whatever
+ * space remains after the left component keeps [leftMinWidth], so left text and right badges never
+ * push each other off-panel in narrow tool windows.
+ */
+private class TwoSidePriorityLayout(
+    private val gap: Int,
+    private val leftMinWidth: Int,
+) : AbstractLayoutManager() {
+    private var left: Component? = null
+    private var right: Component? = null
+
+    override fun addLayoutComponent(
+        comp: Component,
+        constraints: Any?,
+    ) {
+        if (constraints == RIGHT) right = comp else left = comp
+    }
+
+    override fun removeLayoutComponent(comp: Component) {
+        if (comp === right) right = null
+        if (comp === left) left = null
+    }
+
+    override fun preferredLayoutSize(parent: Container): Dimension {
+        val insets = parent.insets
+        val l = left?.preferredSize ?: Dimension()
+        val r = right?.takeIf { it.isVisible }?.preferredSize ?: Dimension()
+        val width = l.width + (if (r.width > 0) gap else 0) + r.width
+        return Dimension(width + insets.left + insets.right, max(l.height, r.height) + insets.top + insets.bottom)
+    }
+
+    override fun layoutContainer(parent: Container) {
+        val insets = parent.insets
+        val avail = parent.width - insets.left - insets.right
+        val height = parent.height - insets.top - insets.bottom
+        val visibleRight = right?.takeIf { it.isVisible }
+        val rightPref = visibleRight?.preferredSize?.width ?: 0
+        val rightWidth = if (rightPref == 0) 0 else min(rightPref, max(0, avail - leftMinWidth - gap))
+        val leftWidth = max(0, avail - rightWidth - if (rightWidth > 0) gap else 0)
+        left?.setBounds(insets.left, insets.top, leftWidth, height)
+        visibleRight?.setBounds(insets.left + avail - rightWidth, insets.top, rightWidth, height)
+    }
+
+    companion object {
+        const val RIGHT = "right"
+    }
 }

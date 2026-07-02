@@ -54,6 +54,13 @@ data class WorktreeStatus(
     val creatorName: String? = null,
     val creatorEmail: String? = null,
     val creatorEpochSeconds: Long? = null,
+    val committers: List<Contributor> = emptyList(),
+)
+
+/** A person who authored commits on a worktree branch; email drives avatar lookup, name the monogram. */
+data class Contributor(
+    val name: String,
+    val email: String?,
 )
 
 /**

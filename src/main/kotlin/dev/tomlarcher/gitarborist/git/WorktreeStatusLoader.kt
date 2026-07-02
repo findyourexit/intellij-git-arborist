@@ -47,6 +47,7 @@ class WorktreeStatusLoader(
             creatorName = creator?.name ?: commit?.authorName,
             creatorEmail = creator?.email ?: commit?.authorEmail,
             creatorEpochSeconds = creator?.epochSeconds ?: commit?.epochSeconds,
+            committers = committers(virtualFile, defaultBranch),
             safeToDelete = safeToDelete(virtualFile, base, defaultBranch),
         )
     }
@@ -111,6 +112,34 @@ class WorktreeStatusLoader(
                 epochSeconds = parts.getOrNull(2)?.toLongOrNull(),
             )
         }
+    }
+
+    private fun committers(
+        root: VirtualFile,
+        defaultBranch: String?,
+    ): List<Contributor> {
+        val unique = committerContributors(root, defaultBranch?.let { "$it..HEAD" })
+        return unique.ifEmpty { committerContributors(root, null) }
+    }
+
+    private fun committerContributors(
+        root: VirtualFile,
+        range: String?,
+    ): List<Contributor> {
+        val handler = GitLineHandler(project, root, GitCommand.LOG)
+        handler.addParameters("--format=%an%x00%ae")
+        if (range != null) handler.addParameters(range) else handler.addParameters("-$RECENT_COMMIT_SCAN")
+        val result = Git.getInstance().runCommand(handler)
+        if (!result.success()) return emptyList()
+        return result
+            .getOutputAsJoinedString()
+            .lineSequence()
+            .map { it.split('\u0000', limit = 2) }
+            .map { Contributor(it.getOrNull(0).orEmpty().trim(), it.getOrNull(1)?.trim()?.takeIf(String::isNotBlank)) }
+            .filter { it.name.isNotBlank() }
+            .distinctBy { it.email ?: it.name }
+            .take(MAX_COMMITTERS)
+            .toList()
     }
 
     private fun safeToDelete(
@@ -234,3 +263,6 @@ private data class CreatorDetails(
     val email: String?,
     val epochSeconds: Long?,
 )
+
+private const val MAX_COMMITTERS = 30
+private const val RECENT_COMMIT_SCAN = 30
