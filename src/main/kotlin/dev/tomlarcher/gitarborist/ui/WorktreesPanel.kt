@@ -391,17 +391,47 @@ class WorktreesPanel(
     }
 
     fun createWorktree() {
-        val main =
-            viewModel.state.rows
-                .firstOrNull { it.info.isMain }
-                ?.info ?: viewModel.state.rows
-                .firstOrNull()
-                ?.info
-        val repositoryRoot = main?.repositoryRoot ?: project.basePath?.let(java.nio.file.Path::of) ?: return
+        val repositoryRoot = mainRepositoryRoot() ?: return
         val settings = GitArboristSettingsResolver.effective(project)
         val dialog = CreateWorktreeDialog(project, repositoryRoot, settings.openAfterCreate, settings.defaultWorktreeDirectory)
         if (!dialog.showAndGet()) return
         createWorktree(dialog.request(), dialog.shouldOpenAfterCreate)
+    }
+
+    fun checkoutRemoteBranch() {
+        val repositoryRoot = mainRepositoryRoot() ?: return
+        val settings = GitArboristSettingsResolver.effective(project)
+        runBackground(
+            title = "Loading remote branches",
+            work = { project.service<WorktreeGitService>().listRemoteBranches(repositoryRoot) },
+        ) { branches ->
+            val dialog =
+                CheckoutRemoteBranchDialog(
+                    project = project,
+                    repositoryRoot = repositoryRoot,
+                    initialBranches = branches,
+                    openByDefault = settings.openAfterCreate,
+                    worktreeDirectory = settings.defaultWorktreeDirectory,
+                    fetcher = {
+                        val service = project.service<WorktreeGitService>()
+                        val fetch = service.fetchRemotes(repositoryRoot)
+                        if (!fetch.success) error(fetch.output.ifBlank { "Fetch failed" })
+                        service.listRemoteBranches(repositoryRoot)
+                    },
+                )
+            if (dialog.showAndGet()) createWorktree(dialog.request(), dialog.shouldOpenAfterCreate)
+        }
+    }
+
+    private fun mainRepositoryRoot(): Path? {
+        val main =
+            viewModel.state.rows
+                .firstOrNull { it.info.isMain }
+                ?.info
+                ?: viewModel.state.rows
+                    .firstOrNull()
+                    ?.info
+        return main?.repositoryRoot ?: project.basePath?.let(Path::of)
     }
 
     private fun createWorktree(

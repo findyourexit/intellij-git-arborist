@@ -49,6 +49,9 @@ class WorktreesToolWindowFactory :
         toolWindow.setTitleActions(
             listOf(
                 titleAction("Create Worktree", "Create worktree", AllIcons.General.Add) { panel.createWorktree() },
+                titleAction("New Worktree from Remote Branch", "Create a worktree from a remote branch", AllIcons.Vcs.Branch) {
+                    panel.checkoutRemoteBranch()
+                },
                 titleAction("Remove Worktree", "Remove selected worktree", AllIcons.General.Remove) { panel.removeSelected() },
                 titleAction("Open Worktree...", "Open selected worktree", AllIcons.Actions.MenuOpen) { panel.openSelected() },
                 titleAction("Refresh Worktrees", "Refresh worktrees", AllIcons.Actions.Refresh) { panel.refresh() },
