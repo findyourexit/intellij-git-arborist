@@ -10,6 +10,7 @@ import dev.tomlarcher.gitarborist.util.PathUtil
 import git4idea.commands.Git
 import git4idea.commands.GitCommand
 import git4idea.commands.GitLineHandler
+import git4idea.fetch.GitFetchSupport
 import git4idea.repo.GitRepository
 import git4idea.repo.GitRepositoryManager
 import java.nio.file.Path
@@ -55,16 +56,62 @@ class WorktreeGitService(
         assertNotEdt()
         require(!request.targetPath.exists()) { "Target path already exists: ${request.targetPath}" }
         request.targetPath.parent?.createDirectories()
-        val repository = repositoryFor(request.repositoryRoot)
-        val handler = GitLineHandler(project, repository.root, GitCommand.WORKTREE)
+        val registered = registeredRepository(request.repositoryRoot)
+        val rootFile = registered?.root ?: repositoryRootFile(request.repositoryRoot)
+        val handler = GitLineHandler(project, rootFile, GitCommand.WORKTREE)
         handler.addParameters("add")
         if (request.detach) handler.addParameters("--detach")
         if (request.createBranch && request.branchName != null) handler.addParameters("-b", request.branchName)
         handler.endOptions()
         handler.addParameters(request.targetPath.toString(), request.sourceRef)
         val result = Git.getInstance().runCommand(handler).toWorktreeResult()
-        if (result.success) refresh(repository, request.targetPath)
+        if (result.success) {
+            registered?.update()
+            LocalFileSystem.getInstance().refreshAndFindFileByNioFile(request.targetPath)
+        }
         return result
+    }
+
+    /**
+     * Remote-tracking branches known to the git root from its last fetch, ordered for the picker. Reads
+     * `git for-each-ref refs/remotes` on the resolved root so it works before Git4Idea has registered a
+     * repository for the project (as the worktree list already does); call [fetchRemotes] first to
+     * surface branches added on the remote since the last fetch.
+     */
+    fun listRemoteBranches(repositoryRoot: Path): List<RemoteBranch> {
+        assertNotEdt()
+        val rootFile = repositoryRootFile(repositoryRoot)
+        val handler = GitLineHandler(project, rootFile, GitCommand.FOR_EACH_REF)
+        handler.addParameters("--format=%(refname)%00%(objectname:short)", "refs/remotes")
+        val result = Git.getInstance().runCommand(handler)
+        if (!result.success()) return emptyList()
+        return RemoteWorktreePlanner.sorted(RemoteBranchParser.parse(result.stdout(), remoteNames(rootFile)))
+    }
+
+    /**
+     * Fetches every remote so a following [listRemoteBranches] reflects branches added on the remote.
+     * When Git4Idea has a registered repository it uses the fetch support that wires up authentication
+     * and progress; otherwise it falls back to `git fetch --all --prune` on the resolved root so the
+     * flow still works before the repository is registered.
+     */
+    fun fetchRemotes(repositoryRoot: Path): WorktreeCommandResult {
+        assertNotEdt()
+        val registered = registeredRepository(repositoryRoot)
+        if (registered != null) {
+            val result = GitFetchSupport.fetchSupport(project).fetchAllRemotes(listOf(registered))
+            return runCatching { result.throwExceptionIfFailed() }.fold(
+                onSuccess = {
+                    registered.update()
+                    WorktreeCommandResult(success = true, stdout = "Fetched all remotes", stderr = "")
+                },
+                onFailure = { error ->
+                    WorktreeCommandResult(success = false, stdout = "", stderr = error.message ?: "Fetch failed")
+                },
+            )
+        }
+        val handler = GitLineHandler(project, repositoryRootFile(repositoryRoot), GitCommand.FETCH)
+        handler.addParameters("--all", "--prune")
+        return Git.getInstance().runCommand(handler).toWorktreeResult()
     }
 
     fun removeWorktree(request: RemoveWorktreeRequest): WorktreeCommandResult {
@@ -251,6 +298,35 @@ class WorktreeGitService(
         repositories().firstOrNull { repository ->
             PathUtil.samePath(repository.root.toNioPath(), root)
         } ?: error("No Git repository for $root")
+
+    /** The registered repository whose root matches [root], or null when Git4Idea has not registered one. */
+    private fun registeredRepository(root: Path): GitRepository? =
+        repositories().firstOrNull { repository ->
+            PathUtil.samePath(repository.root.toNioPath(), root)
+        }
+
+    /**
+     * A VFS handle for the git root at [root]: the registered repository's root when Git4Idea has one,
+     * otherwise the on-disk directory (which the worktree listing has already confirmed is a git root),
+     * so remote-branch and worktree-add commands run even before the repository is registered.
+     */
+    private fun repositoryRootFile(root: Path): VirtualFile =
+        registeredRepository(root)?.root
+            ?: LocalFileSystem.getInstance().refreshAndFindFileByNioFile(root)
+            ?: error("No Git repository for $root")
+
+    /** Configured remote names for the git root, used to split `<remote>/<branch>` tracking refs. */
+    private fun remoteNames(rootFile: VirtualFile): List<String> {
+        val handler = GitLineHandler(project, rootFile, GitCommand.REMOTE)
+        val result = Git.getInstance().runCommand(handler)
+        if (!result.success()) return emptyList()
+        return result
+            .stdout()
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .toList()
+    }
 
     private fun refresh(
         repository: GitRepository,

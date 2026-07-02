@@ -56,6 +56,21 @@ data class WorktreeStatus(
     val creatorEpochSeconds: Long? = null,
 )
 
+/**
+ * A remote-tracking branch offered in the "new worktree from a remote branch" flow.
+ *
+ * @property remote the owning remote's name, e.g. `origin`
+ * @property branchName the branch's name on the remote, without the remote prefix, e.g. `feature/x`
+ * @property trackingRef the remote-tracking ref used as the `git worktree add` start point, e.g. `origin/feature/x`
+ * @property shortHash abbreviated tip commit hash, or `null` when the tip is unknown
+ */
+data class RemoteBranch(
+    val remote: String,
+    val branchName: String,
+    val trackingRef: String,
+    val shortHash: String?,
+)
+
 /** Parameters for `git worktree add`: where to create the worktree and how to seed its branch or ref. */
 data class AddWorktreeRequest(
     val repositoryRoot: Path,
