@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-11
+
 ### Added
 
 - The Worktrees tool window now keeps itself current when worktrees are added, removed, or moved outside Git Arborist (the Git CLI, other plugins, or other IDE actions). It refreshes silently on Git4Idea repository changes while visible, and when the tool window is reopened, so the list no longer goes stale until a manual refresh.
@@ -52,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Git > Worktrees` main-menu group, Project View context group on worktree directories, and a tool-window title drawn from the repository's `owner/repo` identity.
 - Settings under Version Control > Git Arborist for the default worktree directory, open mode, carry-over scope and source, `.idea/` copying, manifest file name, automatic-carry-over guard, heavy-path opt-in, and relative locations, with an optional per-project override.
 
-[Unreleased]: https://github.com/findyourexit/intellij-git-arborist/compare/0.1.0...HEAD
-[0.1.1]: https://github.com/findyourexit/intellij-git-arborist/releases/tag/0.1.1
-[0.1.0]: https://github.com/findyourexit/intellij-git-arborist/releases/tag/0.1.0
+[Unreleased]: https://github.com/findyourexit/intellij-git-arborist/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/findyourexit/intellij-git-arborist/compare/0.1.1...0.2.0
+[0.1.1]: https://github.com/findyourexit/intellij-git-arborist/compare/0.1.0...0.1.1
+[0.1.0]: https://github.com/findyourexit/intellij-git-arborist/commits/0.1.0
