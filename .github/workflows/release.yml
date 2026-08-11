@@ -10,7 +10,10 @@ on:
         default: false
   push:
     tags:
-      - 'v*.*.*'
+      # Bare semver, matching the tags and GitHub releases already published (0.1.0, 0.1.1) and
+      # the compare links in CHANGELOG.md. A "v"-prefixed pattern was used here previously and
+      # never matched, so this workflow had never run and both prior releases were hand-made.
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: write
@@ -54,7 +57,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -70,7 +73,25 @@ jobs:
         if: >
           env.PUBLISH_TOKEN != '' &&
           (
-            startsWith(github.ref, 'refs/tags/v') ||
+            startsWith(github.ref, 'refs/tags/') ||
             (github.event_name == 'workflow_dispatch' && inputs.publish_to_marketplace)
           )
         run: ./gradlew publishPlugin
+
+      # Fold [Unreleased] into a dated section for the tag just published, then push that back to
+      # main so the next cycle starts from a clean [Unreleased]. `patchChangelog` is idempotent, so
+      # this is a no-op when the changelog was already cut in the release commit.
+      - name: Cut the changelog and push it back to main
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git checkout -B main origin/main
+          ./gradlew patchChangelog
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md is already cut for ${{ github.ref_name }}; nothing to commit."
+            exit 0
+          fi
+          git commit -m "docs(changelog): cut ${{ github.ref_name }}" -- CHANGELOG.md
+          git push origin main
