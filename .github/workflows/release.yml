@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
@@ -99,20 +100,33 @@ jobs:
           )
         run: ./gradlew publishPlugin
 
-      # Fold [Unreleased] into a dated section for the tag just published, then push that back to
-      # main so the next cycle starts from a clean [Unreleased]. `patchChangelog` is idempotent, so
-      # this is a no-op when the changelog was already cut in the release commit.
-      - name: Cut the changelog and push it back to main
+      # Fold [Unreleased] into a dated section for the tag just published, so the next cycle starts
+      # from a clean [Unreleased]. The repository ruleset on main requires changes to arrive by pull
+      # request and GITHUB_TOKEN is not a bypass actor, so this proposes the cut rather than pushing
+      # it. `patchChangelog` is idempotent, so the step is a no-op when the changelog was already
+      # cut in the release commit — which is the normal case when the version was prepared in a PR.
+      - name: Propose the changelog cut for this release
         if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
+          BRANCH="chore/changelog-$TAG"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
-          git checkout -B main origin/main
+          git checkout -B "$BRANCH" origin/main
           ./gradlew patchChangelog
           if git diff --quiet -- CHANGELOG.md; then
-            echo "CHANGELOG.md is already cut for ${{ github.ref_name }}; nothing to commit."
+            echo "CHANGELOG.md is already cut for $TAG; nothing to propose."
             exit 0
           fi
-          git commit -m "docs(changelog): cut ${{ github.ref_name }}" -- CHANGELOG.md
-          git push origin main
+          git commit -m "docs(changelog): cut $TAG" -- CHANGELOG.md
+          # Plain force: the branch is regenerated from origin/main on every run, and
+          # --force-with-lease would fail with "stale info" on a re-run because the branch's
+          # remote-tracking ref was never fetched.
+          git push --force origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "docs(changelog): cut $TAG" \
+            --body "Folds the \`[Unreleased]\` section into \`## [$TAG]\` now that $TAG is published, so the next cycle starts from a clean \`[Unreleased]\`. Opened automatically by the Release workflow." \
+            || echo "A pull request for $BRANCH already exists."
