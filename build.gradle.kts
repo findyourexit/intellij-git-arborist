@@ -1,3 +1,5 @@
+import org.jetbrains.changelog.Changelog
+import org.jetbrains.changelog.ChangelogSectionUrlBuilder
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
@@ -8,10 +10,13 @@ plugins {
     id("org.jetbrains.intellij.platform")
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.changelog)
 }
 
+val pluginVersion = "0.2.0"
+
 group = "dev.tomlarcher.gitarborist"
-version = "0.2.0"
+version = pluginVersion
 
 kotlin {
     jvmToolchain(21)
@@ -33,6 +38,35 @@ detekt {
         "src/main/kotlin",
         "src/test/kotlin",
     )
+}
+
+changelog {
+    repositoryUrl = "https://github.com/findyourexit/intellij-git-arborist"
+    // Newly cut [Unreleased] sections start bare; this project only writes the group headings
+    // (Added / Fixed / Changed / …) that actually carry entries.
+    groups.empty()
+    introduction =
+        """
+        All notable changes to Git Arborist are documented in this file.
+
+        The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+        """.trimIndent()
+    // Mirrors the built-in section-link builder minus its hardcoded "v" tag prefix: this project's
+    // tags and GitHub releases are bare versions (0.1.0, 0.1.1), so the default would emit
+    // compare links against tags that do not exist.
+    sectionUrlBuilder =
+        ChangelogSectionUrlBuilder { repositoryUrl, currentVersion, previousVersion, isUnreleased ->
+            repositoryUrl +
+                when {
+                    isUnreleased ->
+                        when (previousVersion) {
+                            null -> "/commits"
+                            else -> "/compare/$previousVersion...HEAD"
+                        }
+                    previousVersion == null -> "/commits/$currentVersion"
+                    else -> "/compare/$previousVersion...$currentVersion"
+                }
+        }
 }
 
 dependencies {
@@ -107,10 +141,20 @@ intellijPlatform {
             </p>
             """.trimIndent()
 
+        // Rendered straight from CHANGELOG.md so the Marketplace "What's New" cannot drift from
+        // the released notes. Falls back to [Unreleased] when this version's section has not been
+        // cut yet, so a build taken before `patchChangelog` still ships the correct notes.
         changeNotes =
-            """
-            Initial release: a Worktrees tool window, Git menu and Project View actions for create, open, remove, lock, move, prune, and repair, multiple open modes, and carry-over of project setup into a new worktree before its first open.
-            """.trimIndent()
+            provider {
+                with(changelog) {
+                    renderItem(
+                        (getOrNull(pluginVersion) ?: getUnreleased())
+                            .withHeader(false)
+                            .withEmptySections(false),
+                        Changelog.OutputType.HTML,
+                    )
+                }
+            }
     }
 
     pluginVerification {

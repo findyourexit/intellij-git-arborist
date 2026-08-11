@@ -1,5 +1,6 @@
 [versions]
 androidStudio = "2025.2.3.9"
+changelog = "2.5.0"
 detekt = "2.0.0-alpha.6"
 intellijIdea = "2025.2.6.2"
 junit = "4.13.2"
@@ -11,6 +12,7 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
 
 [plugins]
+changelog = { id = "org.jetbrains.changelog", version.ref = "changelog" }
 detekt = { id = "dev.detekt", version.ref = "detekt" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
