@@ -1,6 +1,6 @@
 [versions]
 androidStudio = "2025.2.3.9"
-detekt = "2.0.0-alpha.5"
+detekt = "2.0.0-alpha.6"
 intellijIdea = "2025.2.6.2"
 junit = "4.13.2"
 kotlin = "2.4.10"
