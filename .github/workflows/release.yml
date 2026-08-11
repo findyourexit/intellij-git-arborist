@@ -22,8 +22,8 @@ jobs:
   release:
     name: Build & release
     runs-on: ubuntu-latest
-    # Expose secrets as job-level env vars. PUBLISH_TOKEN's presence is checked in a step
-    # condition below; CERTIFICATE_CHAIN / PRIVATE_KEY / PRIVATE_KEY_PASSWORD are read by the
+    # Expose secrets as job-level env vars. A tag build asserts PUBLISH_TOKEN is present in the
+    # first step below; CERTIFICATE_CHAIN / PRIVATE_KEY / PRIVATE_KEY_PASSWORD are read by the
     # Gradle `signing {}` block so `publishPlugin` signs the artifact before upload. Absent
     # signing secrets simply skip signing rather than failing the build.
     env:
@@ -32,6 +32,17 @@ jobs:
       PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
       PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
     steps:
+      # Checked before anything expensive runs. The publish step below is guarded on PUBLISH_TOKEN
+      # being non-empty, and a skipped step does not fail a run — so without this assertion a tag
+      # build would report success having uploaded nothing to the Marketplace.
+      - name: Require a publish token for tag builds
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ -z "$PUBLISH_TOKEN" ]; then
+            echo "::error title=Missing PUBLISH_TOKEN::Tag ${{ github.ref_name }} cannot be published to the JetBrains Marketplace. Generate a token at https://plugins.jetbrains.com/author/me/tokens, add it as the PUBLISH_TOKEN repository secret, then re-run. Use workflow_dispatch if you meant to build without publishing."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
@@ -55,16 +66,26 @@ jobs:
           name: git-arborist-${{ github.ref_name }}
           path: build/distributions/*.zip
           if-no-files-found: error
+          # Without this a re-run fails: uploading a name that already exists is an error.
+          overwrite: true
 
-      - name: Create GitHub release
+      # Create-or-update rather than create: `gh release create` errors when the release already
+      # exists, which on a re-run would abort the job here and never reach the publish step below.
+      - name: Create or update the GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "Git Arborist ${{ github.ref_name }}" \
-            --generate-notes \
-            build/distributions/*.zip
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; replacing its assets."
+            gh release upload "$TAG" build/distributions/*.zip --clobber
+          else
+            gh release create "$TAG" \
+              --title "Git Arborist $TAG" \
+              --generate-notes \
+              build/distributions/*.zip
+          fi
 
       # Publishes to JetBrains Marketplace when PUBLISH_TOKEN is present and either:
       #   - a version tag triggered the run, or
