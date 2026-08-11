@@ -17,7 +17,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/IntelliJ%20Platform-2025.2%2B-000000?logo=intellijidea&logoColor=white" alt="IntelliJ Platform 2025.2+" />
   <img src="https://img.shields.io/badge/Android%20Studio-2025.2.1%2B-3DDC84?logo=androidstudio&logoColor=white" alt="Android Studio 2025.2.1+" />
-  <img src="https://img.shields.io/badge/Kotlin-2.4.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin 2.4.0" />
+  <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin 2.4.10" />
   <img src="https://img.shields.io/badge/JDK-21-ED8B00?logo=openjdk&logoColor=white" alt="JDK 21" />
 </p>
 
