@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Reworked each worktree row for density and legibility, aligning with the Pull Requests tool window: the branch name is no longer bold, MAIN/CURRENT/DIRTY/SAFE sit as pills beside the title (where DRAFT appears), the commit message moves up to the second line, and the remaining detail (locked, prunable, detached, staged/unstaged/untracked counts, line delta, and main/remote divergence) drops to a third line. The relative path is hidden but still shown on hover.
+- Every third-party GitHub Actions step in the CI and release workflows is now pinned to a full commit SHA instead of a mutable tag (`actions/checkout`, `actions/setup-java`, `actions/upload-artifact`, `gradle/actions/wrapper-validation`, `gradle/actions/setup-gradle`). Tags such as `@v7` are movable refs, so an upstream account compromise could have silently swapped the code that builds, verifies, and signs the released plugin. Each pin carries a trailing `# vX.Y.Z` comment, so Dependabot keeps updating them as before while the exact reviewed commit stays fixed.
 
 ## [0.1.1] - 2026-06-23
 
