@@ -90,3 +90,17 @@ cmake-build-*/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Plugin signing key material
+#
+# The JetBrains signing keys are generated with openssl (see plugin-signing.html)
+# and are frequently created inside the project directory. They belong in the
+# PRIVATE_KEY / CERTIFICATE_CHAIN / PRIVATE_KEY_PASSWORD repository secrets and
+# must never be committed: private.pem is an unencrypted RSA private key.
+# ---------------------------------------------------------------------------
+*.pem
+*.crt
+*.p12
+*.jks
+*.key
